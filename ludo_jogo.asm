@@ -57,25 +57,27 @@
 	#jal draw_board
 main_loop:
 	jal roll_dice
-	lw $t1, current_player
-	sll $t1, $t1, 2
-	la $t2, current_position_v
-	add $t2, $t2, $t1
-	lw $t3, 0($t2) #current_position_v[current_player]
-	bne $t3, $zero, end_of_initial_roll_condition #if(current_position_v[current_player] == 0
-	lw $t4, dice_roll_result
-	beq $t4, 6, end_of_initial_roll_condition # && number != 6)
+	lw $t0, current_player
+	sll $t0, $t0, 2
+	la $t1, current_position_v
+	add $t1, $t1, $t0
+	lw $t2, 0($t1) #current_position_v[current_player]
+	seq $t4, $t2, $zero #if(current_position_v[current_player] == 0)
+	lw $t3, dice_roll_result
+	sne $t5, $t3, 6 # if(number != 6)
+	and $t6, $t5, $t4
+	beq $t6, 1, change_player_condition #if(current_position_v[current_player] == 0 && number != 6)
 	j try_move #try_move();
-end_of_initial_roll_condition:
-	beq $t4, 6, main_loop #while(number == 6);
-	srl $t1, $t1, 2
-	beq $t1, 3, change_player_condition #if(current_player == 3)
-	addi $t1, $t1, 1 #currente_player++;
-	j not_change_player_condition
-change_player_condition: #else:
-	li $t1, 0 #current_player = 0
-not_change_player_condition:
-	sw $t1, current_player
+	beq $t3, 6, main_loop #while(number == 6);
+change_player_condition:
+	srl $t0, $t0, 2
+	beq $t0, 3, change_player_condition_true #if(current_player == 3)
+	addi $t0, $t0, 1 #currente_player++;
+	j change_player_condition_false
+change_player_condition_true: #else:
+	li $t0, 0 #current_player = 0
+change_player_condition_false:
+	sw $t0, current_player
 	j main_loop
 exit_game:
 	li $v0,10
