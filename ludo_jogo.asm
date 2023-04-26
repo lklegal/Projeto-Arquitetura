@@ -31,6 +31,7 @@
 	
 	dice_roll_message_1:            .asciiz "Jogador "
 	dice_roll_message_2:            .asciiz " rolou os dados, e tirou o numero "
+	victory_message:                .asciiz "Ganhou!"
 	dice_roll_result:       .word   3
 	
 	players_paths_m:	.word   green_path, red_path, blue_path, yellow_path
@@ -67,7 +68,7 @@ main_loop:
 	sne $t5, $t3, 6 # if(number != 6)
 	and $t6, $t5, $t4
 	beq $t6, 1, change_player_condition #if(current_position_v[current_player] == 0 && number != 6)
-	j try_move #try_move();
+	jal try_move #try_move();
 	beq $t3, 6, main_loop #while(number == 6);
 change_player_condition:
 	srl $t0, $t0, 2
@@ -80,32 +81,46 @@ change_player_condition_false:
 	sw $t0, current_player
 	j main_loop
 exit_game:
+	li $v0, 4
+	la $a0, victory_message
+	syscall #imprime "Ganhou!"
 	li $v0,10
 	syscall
 	
 try_move:
 	j exit_game
+	lw $t0, current_player
+	sll $t0, $t0, 2
+	la $t1, current_position_v
+	add $t1, $t1, $t0
+	lw $t2, 0($t1) #current_position_v[current_player]
+	lw $t3, dice_roll_result
+	add $t3, $t3, $t2 #current_position_v[current_player] + step
+	sgt $t4, $t3, 57 #if((current_position_v[current_player] + step) > 57),|||| 57 => path_size
+	beq $t4, 1, change_player_condition #not jumping back to $ra because, in this case, we don't want the player to roll the dice again if they got a 6
+	beq $t3, 57, exit_game #if((current_position_v[current_player] + step) == 57),|||| 57 => path_size, jumps to exit_game
+	jr $ra
 
 roll_dice:
 	li $v0, 4
 	la $a0, dice_roll_message_1
-	syscall #imprime "Jogador "
+	syscall #prints "Jogador "
 	li $v0, 1
 	lw $a0, current_player
 	addi $a0, $a0, 1
-	syscall #imprime o número do jogador atual
+	syscall #prints the number of the current player
 	li $v0, 4
 	la $a0, dice_roll_message_2
-	syscall #imprime " rolou os dados, e tirou o numero "
+	syscall #prints " rolou os dados, e tirou o numero "
 	li $v0, 42
 	li $a1, 6
-	syscall #sorteia um número de 0 a 5
-	addi $a0, $a0, 1 #adiciona 1 ao número sorteado, para ficar de 1 a 6
+	syscall #randomly picks a number from 0 to 5
+	addi $a0, $a0, 1 #adds 1 to the randomly picked number, so that it becomes a number between 1 and 6
 	sw $a0, dice_roll_result
 	li $v0, 1
-	syscall #imprime o número de 1 a 6 sorteado
+	syscall #prints the number between 1 and 6
 	li $v0, 12
-	syscall #espera um input do jogador
+	syscall #waits for an input from the player
 	jr $ra
 
 draw_board:
