@@ -73,9 +73,9 @@ main_loop:
 	jal try_move #try_move();
 	beq $t3, 6, main_loop #while(number == 6);
 change_player_condition:
-	srl $t0, $t0, 2
+	lw $t0, current_player
 	beq $t0, 3, change_player_condition_true #if(current_player == 3)
-	addi $t0, $t0, 1 #currente_player++;
+	addi $t0, $t0, 1 #current_player++;
 	j change_player_condition_false
 change_player_condition_true: #else:
 	li $t0, 0 #current_player = 0
@@ -91,7 +91,7 @@ exit_game:
 	syscall
 	
 try_move:
-	j exit_game
+	#j exit_game
 	lw $t0, current_player
 	sll $t0, $t0, 2
 	la $t1, current_position_v
@@ -126,21 +126,36 @@ move_player:
 	addi $sp, $sp, -4
 	sw $ra, 0($sp)
 	sll $a1, $a1, 2
-	addi $t0, $a1, $a2 #pixel_to_move = paths[player][next_position]
-	srl $a1, $a1, 2
+	add $t0, $a1, $a2 #pixel_to_move = paths[player][next_position], but as an address, not a value
 	la $t2, current_position_v
 	sll $a0, $a0, 2
 	add $t2, $t2, $a0
 	lw $t1, 0($t2) #current_position_v[player]
 	sll $t1, $t1, 2
 	add $t2, $a2, $t1 #current_pixel = paths[player][current_position_v[player]]
+	lw $t2, 0($t2) #current_pixel = paths[player][current_position_v[player]]
 	la $t3, previous_colors_v
 	add $t3, $t3, $a0
 	lw $t3, 0($t3) #previous_color_v[player]
+	sll $t2, $t2, 2
 	add $t4, $t2, $gp
 	sw $t3, 0($t4) #board[current_pixel] = previous_color_v[player]
-
-	srl $a0, $a0, 2
+	la $t3, previous_colors_v
+	add $t3, $t3, $a0 #previous_color_v[player], but as an address, not a value
+	lw $t0, 0($t0) #pixel_to_move = paths[player][next_position]
+	sll $t0, $t0, 2
+	add $t4, $t0, $gp #board[pixel_to_move], but as an address, not a value
+	lw $t4, 0($t4) #getting the new previous_color from the position in the board the player will move to
+	sw $t4, 0($t3) #previous_color_v[player]= board[pixel_to_move]
+	add $t4, $t0, $gp #board[pixel_to_move], but as an address, not a value
+	sw $a3, 0($t4) #board[pixel_to_move]=players_colors[player]
+	la $t2, current_position_v
+	add $t2, $t2, $a0
+	srl $a1, $a1, 2 #dividing next_position by 4
+	sw $a1, 0($t2) #current_position_v[player] = position_to_move
+	lw $ra, 0($sp)
+	addi $sp, $sp, 4
+	jr $ra
 	
 
 check_if_kills:
@@ -152,86 +167,98 @@ check_if_kills:
 	beq $a1, 2, is_player_2
 	beq $a1, 3, is_player_3
 is_player_0:
-	la $t1, green_path
+	la $s1, green_path
+	lw $s2, dark_green
 	sll $t2, $a0, 2
-	add $t2, $t2, $t1 #players[0][next_position]
+	add $t2, $t2, $s1 #paths[0][next_position]
 	lw $t2, 0($t2)
 	j end_of_which_player_it_is_check
 is_player_1:
-	la $t1, red_path
+	la $s1, red_path
+	lw $s2, dark_red
 	sll $t2, $a0, 2
-	add $t2, $t2, $t1 #players[1][next_position]
+	add $t2, $t2, $s1 #paths[1][next_position]
 	lw $t2, 0($t2)
 	j end_of_which_player_it_is_check
 is_player_2:
-	la $t1, blue_path
+	la $s1, blue_path
+	lw $s2, dark_blue
 	sll $t2, $a0, 2
-	add $t2, $t2, $t1 #players[2][next_position]
+	add $t2, $t2, $s1 #paths[2][next_position]
 	lw $t2, 0($t2)
 	j end_of_which_player_it_is_check
 is_player_3:
-	la $t1, yellow_path
+	la $s1, yellow_path
+	lw $s2, dark_yellow
 	sll $t2, $a0, 2
-	add $t2, $t2, $t1 #players[3][next_position]
+	add $t2, $t2, $s1 #paths[3][next_position]
 	lw $t2, 0($t2)
 	j end_of_which_player_it_is_check
 end_of_which_player_it_is_check:
-	add $a2, $zero, $t1 #not ideal, but, to not have to check again which player will move, i'm saving the result of $t1 in $a2 to reuse it in move_player
-	la $t3, current_position_v
 	#check if green dies
+	la $t3, current_position_v
 	la $t4, green_path
 	lw $t3, 0($t3)
-	sll $t3, 2
-	add $t4, $t4, $t3 #paths[0][next_position]
+	sll $t3, $t3, 2
+	add $t4, $t4, $t3 #paths[0][current_position_v[0]]
 	lw $t4, 0($t4)
 	beq $t4, $t2, player_0_dies 
 	#check if red dies
+	la $t3, current_position_v
 	la $t4, red_path
 	lw $t3, 4($t3)
-	sll $t3, 2
-	add $t4, $t4, $t3 #paths[1][next_position]
+	sll $t3, $t3, 2
+	add $t4, $t4, $t3 #paths[1][current_position_v[1]]
 	lw $t4, 0($t4)
 	beq $t4, $t2, player_1_dies
 	#check if blue dies
+	la $t3, current_position_v
 	la $t4, blue_path
 	lw $t3, 8($t3)
-	sll $t3, 2
-	add $t4, $t4, $t3 #paths[2][next_position]
+	sll $t3, $t3, 2
+	add $t4, $t4, $t3 #paths[2][current_position_v[2]]
 	lw $t4, 0($t4)
 	beq $t4, $t2, player_2_dies
 	#check if yellow dies
+	la $t3, current_position_v
 	la $t4, yellow_path
 	lw $t3, 12($t3)
-	sll $t3, 2
-	add $t4, $t4, $t3 #paths[3][next_position]
+	sll $t3, $t3, 2
+	add $t4, $t4, $t3 #paths[3][current_position_v[3]]
 	lw $t4, 0($t4)
 	beq $t4, $t2, player_3_dies
+	j end_of_check_if_kills
 player_0_dies:
 	li $a0, 0
 	la $a2, green_path #not ideal, but, to not have to check again which player will move, i'm saving the target player's path array in $a2 to reuse it in move_player
+	lw $a3, dark_green 
 	li $a1, 0
 	jal move_player
 	j end_of_check_if_kills
 player_1_dies:
 	li $a0, 1
 	la $a2, red_path #not ideal, but, to not have to check again which player will move, i'm saving the target player's path array in $a2 to reuse it in move_player
+	lw $a3, dark_red
 	li $a1, 0
 	jal move_player
 	j end_of_check_if_kills
 player_2_dies:
 	li $a0, 2
 	la $a2, blue_path #not ideal, but, to not have to check again which player will move, i'm saving the target player's path array in $a2 to reuse it in move_player
+	lw $a3, dark_blue
 	li $a1, 0
 	jal move_player
 	j end_of_check_if_kills
 player_3_dies:
 	li $a0, 3
 	la $a2, yellow_path #not ideal, but, to not have to check again which player will move, i'm saving the target player's path array in $a2 to reuse it in move_player 
+	lw $a3, dark_yellow
 	li $a1, 0
 	jal move_player
 	j end_of_check_if_kills
 end_of_check_if_kills:
-	add $a2, $zero, $t1 #not ideal, but, to not have to check again which player will move, i'm saving the result of $t1 in $a2 to reuse it in move_player
+	add $a2, $zero, $s1 #not ideal, but, to not have to check again which player will move, i'm saving the result of $s1 in $a2 to reuse it in move_player
+	add $a3, $zero, $s2
 	lw $ra, 0($sp)
 	addi $sp, $sp, 4
 	jr $ra
