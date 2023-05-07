@@ -5,7 +5,7 @@
 #
 # Developers:
 #	 Ramon Nepomuceno
-#	 *your name*
+#	 Luiz Kaio
 # ##############
 #
 # Bitmap Display Configuration:
