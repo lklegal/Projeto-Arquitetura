@@ -32,6 +32,8 @@
 	dice_roll_message_1:            .asciiz "Jogador "
 	dice_roll_message_2:            .asciiz " rolou os dados, e tirou o numero "
 	victory_message:                .asciiz "Ganhou!"
+	
+	next_position:          .word   0
 	dice_roll_result:       .word   3
 	
 	players_paths_m:	.word   green_path, red_path, blue_path, yellow_path
@@ -55,7 +57,7 @@
 
 .text
 
-	#jal draw_board
+	jal draw_board
 main_loop:
 	jal roll_dice
 	lw $t0, current_player
@@ -80,6 +82,7 @@ change_player_condition_true: #else:
 change_player_condition_false:
 	sw $t0, current_player
 	j main_loop
+
 exit_game:
 	li $v0, 4
 	la $a0, victory_message
@@ -99,6 +102,138 @@ try_move:
 	sgt $t4, $t3, 57 #if((current_position_v[current_player] + step) > 57),|||| 57 => path_size
 	beq $t4, 1, change_player_condition #not jumping back to $ra because, in this case, we don't want the player to roll the dice again if they got a 6
 	beq $t3, 57, exit_game #if((current_position_v[current_player] + step) == 57),|||| 57 => path_size, jumps to exit_game
+	beq $t2, 0, current_position_is_0 #if(current_position_v[current_player] == 0)
+	#else
+	sw $t3, next_position #next_position = current_position_v[current_player] + step
+	j end_if_current_position_is_0
+current_position_is_0:
+	li $t3, 1
+	sw $t3, next_position #next_position = 1
+end_if_current_position_is_0:
+	addi $sp, $sp, -4
+	sw $ra, 0($sp)
+	lw $a0, next_position
+	lw $a1, current_player
+	jal check_if_kills #check_if_kills(next_position, current_player)
+	lw $a0, current_player
+	lw $a1, next_position
+	jal move_player #move_player(next_position, current_player)
+	lw $ra, 0($sp)
+	addi $sp, $sp, 4
+	jr $ra
+	
+move_player:
+	addi $sp, $sp, -4
+	sw $ra, 0($sp)
+	sll $a1, $a1, 2
+	addi $t0, $a1, $a2 #pixel_to_move = paths[player][next_position]
+	srl $a1, $a1, 2
+	la $t2, current_position_v
+	sll $a0, $a0, 2
+	add $t2, $t2, $a0
+	lw $t1, 0($t2) #current_position_v[player]
+	sll $t1, $t1, 2
+	add $t2, $a2, $t1 #current_pixel = paths[player][current_position_v[player]]
+	la $t3, previous_colors_v
+	add $t3, $t3, $a0
+	lw $t3, 0($t3) #previous_color_v[player]
+	add $t4, $t2, $gp
+	sw $t3, 0($t4) #board[current_pixel] = previous_color_v[player]
+
+	srl $a0, $a0, 2
+	
+
+check_if_kills:
+	addi $sp, $sp, -4
+	sw $ra, 0($sp)
+	#there's no matrix here for the players and their positions, only four vectors, so i'll have to do things the hard way
+	beq $a1, 0, is_player_0
+	beq $a1, 1, is_player_1
+	beq $a1, 2, is_player_2
+	beq $a1, 3, is_player_3
+is_player_0:
+	la $t1, green_path
+	sll $t2, $a0, 2
+	add $t2, $t2, $t1 #players[0][next_position]
+	lw $t2, 0($t2)
+	j end_of_which_player_it_is_check
+is_player_1:
+	la $t1, red_path
+	sll $t2, $a0, 2
+	add $t2, $t2, $t1 #players[1][next_position]
+	lw $t2, 0($t2)
+	j end_of_which_player_it_is_check
+is_player_2:
+	la $t1, blue_path
+	sll $t2, $a0, 2
+	add $t2, $t2, $t1 #players[2][next_position]
+	lw $t2, 0($t2)
+	j end_of_which_player_it_is_check
+is_player_3:
+	la $t1, yellow_path
+	sll $t2, $a0, 2
+	add $t2, $t2, $t1 #players[3][next_position]
+	lw $t2, 0($t2)
+	j end_of_which_player_it_is_check
+end_of_which_player_it_is_check:
+	add $a2, $zero, $t1 #not ideal, but, to not have to check again which player will move, i'm saving the result of $t1 in $a2 to reuse it in move_player
+	la $t3, current_position_v
+	#check if green dies
+	la $t4, green_path
+	lw $t3, 0($t3)
+	sll $t3, 2
+	add $t4, $t4, $t3 #paths[0][next_position]
+	lw $t4, 0($t4)
+	beq $t4, $t2, player_0_dies 
+	#check if red dies
+	la $t4, red_path
+	lw $t3, 4($t3)
+	sll $t3, 2
+	add $t4, $t4, $t3 #paths[1][next_position]
+	lw $t4, 0($t4)
+	beq $t4, $t2, player_1_dies
+	#check if blue dies
+	la $t4, blue_path
+	lw $t3, 8($t3)
+	sll $t3, 2
+	add $t4, $t4, $t3 #paths[2][next_position]
+	lw $t4, 0($t4)
+	beq $t4, $t2, player_2_dies
+	#check if yellow dies
+	la $t4, yellow_path
+	lw $t3, 12($t3)
+	sll $t3, 2
+	add $t4, $t4, $t3 #paths[3][next_position]
+	lw $t4, 0($t4)
+	beq $t4, $t2, player_3_dies
+player_0_dies:
+	li $a0, 0
+	la $a2, green_path #not ideal, but, to not have to check again which player will move, i'm saving the target player's path array in $a2 to reuse it in move_player
+	li $a1, 0
+	jal move_player
+	j end_of_check_if_kills
+player_1_dies:
+	li $a0, 1
+	la $a2, red_path #not ideal, but, to not have to check again which player will move, i'm saving the target player's path array in $a2 to reuse it in move_player
+	li $a1, 0
+	jal move_player
+	j end_of_check_if_kills
+player_2_dies:
+	li $a0, 2
+	la $a2, blue_path #not ideal, but, to not have to check again which player will move, i'm saving the target player's path array in $a2 to reuse it in move_player
+	li $a1, 0
+	jal move_player
+	j end_of_check_if_kills
+player_3_dies:
+	li $a0, 3
+	la $a2, yellow_path #not ideal, but, to not have to check again which player will move, i'm saving the target player's path array in $a2 to reuse it in move_player 
+	li $a1, 0
+	jal move_player
+	j end_of_check_if_kills
+end_of_check_if_kills:
+	add $a2, $zero, $t1 #not ideal, but, to not have to check again which player will move, i'm saving the result of $t1 in $a2 to reuse it in move_player
+	lw $ra, 0($sp)
+	addi $sp, $sp, 4
 	jr $ra
 
 roll_dice:
